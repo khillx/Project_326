@@ -7,6 +7,9 @@ class User:
     email: str
     password_hash: str
     gamer_tag: str
+    is_verified: bool = False
 
     def verify_email(self) -> bool:
-        pass
+        """Mark email as verified"""
+        self.is_verified = True
+        return self.is_verified
