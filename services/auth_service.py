@@ -1,130 +1,233 @@
+import re
+import secrets
 import bcrypt
-import jwt
-from uuid import uuid4, UUID
-from datetime import datetime, timedelta
-from typing import Optional, Dict
-from models.user import User
+from typing import Optional, Tuple
+from models.user import User, Session
 from repositories.user_repository import UserRepository
 from services.email_service import EmailService
 
+class EmailAlreadyExistsError(Exception): pass
+class GamerTagAlreadyExistsError(Exception): pass
+class WeakPasswordError(Exception): pass
+class InvalidEmailError(Exception): pass
+class InvalidCredentialsError(Exception): pass
+class AccountNotVerifiedError(Exception): pass
+class InvalidSessionError(Exception): pass
+class InvalidTokenError(Exception): pass
+class TokenExpiredError(Exception): pass
+class UserNotFoundError(Exception): pass
 
 class AuthService:
-    def __init__(self, user_repo: UserRepository, email_service: EmailService):
+    def __init__(self, user_repo: UserRepository, email_service: Optional[EmailService] = None):
         self.user_repo = user_repo
         self.email_service = email_service
-        self.secret_key = "your-secret-key-change-in-production"
-        self.token_expiry_hours = 24
-    
-    def create_account(self, email: str, pwd: str, gamer_tag: str) -> Dict:
-        """Create a new user account"""
-        # Check if user already exists
-        existing_user = self.user_repo.find_by_email(email)
-        if existing_user:
-            raise ValueError("User with this email already exists")
-        
-        # Hash the password
-        password_hash = bcrypt.hashpw(pwd.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
-        
-        # Create user object
-        user = User(
-            id=uuid4(),
+
+    def create_account(self, email: str, pwd: str, gamer_tag: str) -> Tuple[User, bool]:
+        email = (email or "").strip().lower()
+        gamer_tag = (gamer_tag or "").strip()
+
+        if not self._is_valid_email(email):
+            raise InvalidEmailError("Invalid email format.")
+
+        try:
+            self._validate_password_strength(pwd or "")
+        except WeakPasswordError:
+            raise
+        except Exception as e:
+            raise WeakPasswordError(str(e))
+
+        if self.user_repo.get_by_email(email):
+            raise EmailAlreadyExistsError("Email already in use.")
+
+        if self.user_repo.get_by_gamer_tag(gamer_tag):
+            raise GamerTagAlreadyExistsError("Gamer tag already in use.")
+
+        password_hash = self._hash_password(pwd)
+        verification_token = secrets.token_urlsafe(32)
+
+        user = User.create_new(
             email=email,
             password_hash=password_hash,
-            gamer_tag=gamer_tag
+            gamer_tag=gamer_tag,
+            verification_token=verification_token
         )
+        self.user_repo.insert(user)
+
+        verification_sent = False
+        if self.email_service:
+            try:
+                self.email_service.send_verification_email(user.email, verification_token)
+                verification_sent = True
+            except Exception:
+                verification_sent = False
+
+        return user, verification_sent
+
+    def login(self, email: str, pwd: str, require_verification: bool = False) -> Tuple[User, Session]:
+        """
+        Authenticate user and create a session.
+        """
+        email = (email or "").strip().lower()
+        user = self.user_repo.get_by_email(email)
+
+        if not user or not user.verify_password(pwd):
+            raise InvalidCredentialsError("Invalid email or password.")
+
+        if require_verification and not user.is_verified:
+            raise AccountNotVerifiedError("Please verify your email before signing in.")
+
+        self.user_repo.delete_expired_sessions()
+
+        session = Session.create_new(user_id=user.id, expiry_days=7)
+        self.user_repo.create_session(session)
+
+        return user, session
+
+    def logout(self, session_token: str) -> None:
+        """Invalidate a session."""
+        session = self.user_repo.get_session(session_token)
+        if not session:
+            raise InvalidSessionError("Invalid or expired session.")
         
-        # Save to database
-        created_user = self.user_repo.create_user(user)
+        self.user_repo.delete_session(session_token)
+
+    def verify_account(self, token: str) -> User:
+        """
+        Verify a user's email using the verification token.
         
-        # Generate verification token
-        verification_token = self._generate_token(created_user.id, token_type="verification")
-        
-        # Send verification email
-        self.email_service.send_verification_email(email, verification_token)
-        
-        return {
-            "user_id": str(created_user.id),
-            "email": created_user.email,
-            "gamer_tag": created_user.gamer_tag,
-            "message": "Account created. Please check your email to verify."
-        }
-    
-    def login(self, email: str, pwd: str) -> Dict:
-        """Authenticate user and return JWT token"""
-        user = self.user_repo.find_by_email(email)
+        Args:
+            token: The verification token from the email link
+            
+        Returns:
+            The verified User object
+            
+        Raises:
+            InvalidTokenError: If token is invalid or user already verified
+        """
+        if not token:
+            raise InvalidTokenError("Verification token is required.")
+
+        user = self.user_repo.get_by_verification_token(token)
         
         if not user:
-            raise ValueError("Invalid email or password")
+            raise InvalidTokenError("Invalid or expired verification token.")
         
-        # Verify password
-        if not bcrypt.checkpw(pwd.encode('utf-8'), user.password_hash.encode('utf-8')):
-            raise ValueError("Invalid email or password")
+        if user.is_verified:
+            raise InvalidTokenError("Account is already verified.")
+
+        user.mark_verified()
+        self.user_repo.update(user)
+
+        return user
+
+    def request_password_reset(self, email: str) -> bool:
+        """
+        Initiate password reset process by sending reset email.
         
-        # Generate JWT token
-        token = self._generate_token(user.id, token_type="access")
+        Args:
+            email: User's email address
+            
+        Returns:
+            True if email was sent, False otherwise
+            
+        Note:
+            For security, we don't reveal if email exists or not
+        """
+        email = (email or "").strip().lower()
         
-        return {
-            "token": token,
-            "user_id": str(user.id),
-            "email": user.email,
-            "gamer_tag": user.gamer_tag
-        }
-    
-    def logout(self, user_id: UUID) -> bool:
-        """Logout user (token invalidation handled client-side)"""
-        # In a production app, you'd add token to a blacklist
-        return True
-    
-    def reset_password(self, email: str) -> bool:
-        """Send password reset email"""
-        user = self.user_repo.find_by_email(email)
+        if not self._is_valid_email(email):
+            # Don't reveal that email is invalid for security
+            return False
+
+        user = self.user_repo.get_by_email(email)
         
         if not user:
-            # Don't reveal if email exists
-            return True
-        
+            # Don't reveal that user doesn't exist for security
+            return False
+
         # Generate reset token
-        reset_token = self._generate_token(user.id, token_type="reset", expiry_hours=1)
-        
+        reset_token = secrets.token_urlsafe(32)
+        user.set_reset_token(reset_token, expiry_hours=1)
+        self.user_repo.update(user)
+
         # Send reset email
-        self.email_service.send_password_reset_email(email, reset_token)
-        
-        return True
-    
-    def verify_account(self, token: str) -> bool:
-        """Verify user account with token"""
-        try:
-            payload = jwt.decode(token, self.secret_key, algorithms=["HS256"])
-            
-            if payload.get("type") != "verification":
+        if self.email_service:
+            try:
+                self.email_service.send_password_reset_email(user.email, reset_token)
+                return True
+            except Exception:
                 return False
+
+        return False
+
+    def reset_password(self, token: str, new_password: str) -> User:
+        """
+        Reset user's password using the reset token.
+        
+        Args:
+            token: The reset token from the email link
+            new_password: The new password
             
-            user_id = UUID(payload.get("user_id"))
-            return self.user_repo.verify_user_email(user_id)
+        Returns:
+            The updated User object
+            
+        Raises:
+            InvalidTokenError: If token is invalid
+            TokenExpiredError: If token has expired
+            WeakPasswordError: If new password doesn't meet requirements
+        """
+        if not token:
+            raise InvalidTokenError("Reset token is required.")
+
+        user = self.user_repo.get_by_reset_token(token)
         
-        except jwt.ExpiredSignatureError:
-            raise ValueError("Verification token has expired")
-        except jwt.InvalidTokenError:
-            raise ValueError("Invalid verification token")
-    
-    def _generate_token(self, user_id: UUID, token_type: str = "access", expiry_hours: int = None) -> str:
-        """Generate JWT token"""
-        if expiry_hours is None:
-            expiry_hours = self.token_expiry_hours
-        
-        payload = {
-            "user_id": str(user_id),
-            "type": token_type,
-            "exp": datetime.utcnow() + timedelta(hours=expiry_hours),
-            "iat": datetime.utcnow()
-        }
-        
-        return jwt.encode(payload, self.secret_key, algorithm="HS256")
-    
-    def verify_token(self, token: str) -> Optional[UUID]:
-        """Verify JWT token and return user_id"""
+        if not user:
+            raise InvalidTokenError("Invalid reset token.")
+
+        if not user.is_reset_token_valid():
+            raise TokenExpiredError("Reset token has expired. Please request a new one.")
+
+        # Validate new password
         try:
-            payload = jwt.decode(token, self.secret_key, algorithms=["HS256"])
-            return UUID(payload.get("user_id"))
-        except jwt.InvalidTokenError:
+            self._validate_password_strength(new_password or "")
+        except WeakPasswordError:
+            raise
+        except Exception as e:
+            raise WeakPasswordError(str(e))
+
+        # Update password
+        new_password_hash = self._hash_password(new_password)
+        user.update_password(new_password_hash)
+        user.clear_reset_token()
+        self.user_repo.update(user)
+
+        return user
+
+    def get_user_from_session(self, session_token: str) -> Optional[User]:
+        """Retrieve user from a session token."""
+        session = self.user_repo.get_session(session_token)
+        if not session or session.is_expired():
             return None
+        
+        return self.user_repo.get_by_id(str(session.user_id))
+
+    # ===== PRIVATE HELPERS =====
+
+    def _hash_password(self, pwd: str) -> str:
+        salt = bcrypt.gensalt(rounds=12)
+        return bcrypt.hashpw(pwd.encode("utf-8"), salt).decode("utf-8")
+
+    def _is_valid_email(self, email: str) -> bool:
+        return re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", email) is not None
+
+    def _validate_password_strength(self, pwd: str):
+        if len(pwd) < 8:
+            raise WeakPasswordError("Password must be at least 8 characters.")
+        if not re.search(r"[A-Z]", pwd):
+            raise WeakPasswordError("Password must contain an uppercase letter.")
+        if not re.search(r"[a-z]", pwd):
+            raise WeakPasswordError("Password must contain a lowercase letter.")
+        if not re.search(r"[0-9]", pwd):
+            raise WeakPasswordError("Password must contain a digit.")
+        if not re.search(r"[^\w\s]", pwd):
+            raise WeakPasswordError("Password must contain a special character.")

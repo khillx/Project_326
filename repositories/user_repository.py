@@ -1,177 +1,165 @@
-import sqlite3
+import mysql.connector
 from typing import Optional
-from uuid import UUID
 from datetime import datetime
-from models.user import User
+from models.user import User, Session
 
 class UserRepository:
-    def __init__(self, db_path: str = "game_library.db"):
-        self.db_path = db_path
-        self._init_db()
+    def __init__(self, conn_params: dict):
+        self.conn_params = conn_params
 
-    def _init_db(self):
-        with sqlite3.connect(self.db_path) as conn:
-            conn.execute("""
-                CREATE TABLE IF NOT EXISTS users (
-                    id TEXT PRIMARY KEY,
-                    email TEXT UNIQUE NOT NULL,
-                    password_hash TEXT NOT NULL,
-                    gamer_tag TEXT UNIQUE NOT NULL,
-                    is_verified INTEGER NOT NULL DEFAULT 0,
-                    created_at TEXT NOT NULL,
-                    updated_at TEXT NOT NULL
-                )
-            """)
-            conn.execute("""
-                CREATE TABLE IF NOT EXISTS email_verification_tokens (
-                    token TEXT PRIMARY KEY,
-                    user_id TEXT NOT NULL,
-                    expires_at TEXT NOT NULL,
-                    created_at TEXT NOT NULL,
-                    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-                )
-            """)
-            conn.execute("""
-                CREATE TABLE IF NOT EXISTS password_reset_tokens (
-                    token TEXT PRIMARY KEY,
-                    user_id TEXT NOT NULL,
-                    expires_at TEXT NOT NULL,
-                    created_at TEXT NOT NULL,
-                    used INTEGER NOT NULL DEFAULT 0,
-                    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-                )
-            """)
-            conn.execute("PRAGMA foreign_keys = ON;")
+    def _get_conn(self):
+        return mysql.connector.connect(**self.conn_params)
+
+    def get_by_email(self, email: str) -> Optional[User]:
+        sql = """
+            SELECT id, email, password_hash, gamer_tag, is_verified, verification_token, 
+                   reset_token, reset_token_expires_at, created_at, updated_at
+            FROM users WHERE email = %s
+        """
+        with self._get_conn() as conn:
+            with conn.cursor(dictionary=True) as cur:
+                cur.execute(sql, (email,))
+                row = cur.fetchone()
+                return self._row_to_user(row) if row else None
+
+    def get_by_gamer_tag(self, gamer_tag: str) -> Optional[User]:
+        sql = """
+            SELECT id, email, password_hash, gamer_tag, is_verified, verification_token,
+                   reset_token, reset_token_expires_at, created_at, updated_at
+            FROM users WHERE gamer_tag = %s
+        """
+        with self._get_conn() as conn:
+            with conn.cursor(dictionary=True) as cur:
+                cur.execute(sql, (gamer_tag,))
+                row = cur.fetchone()
+                return self._row_to_user(row) if row else None
+
+    def get_by_id(self, user_id: str) -> Optional[User]:
+        sql = """
+            SELECT id, email, password_hash, gamer_tag, is_verified, verification_token,
+                   reset_token, reset_token_expires_at, created_at, updated_at
+            FROM users WHERE id = %s
+        """
+        with self._get_conn() as conn:
+            with conn.cursor(dictionary=True) as cur:
+                cur.execute(sql, (user_id,))
+                row = cur.fetchone()
+                return self._row_to_user(row) if row else None
+
+    def get_by_verification_token(self, token: str) -> Optional[User]:
+        sql = """
+            SELECT id, email, password_hash, gamer_tag, is_verified, verification_token,
+                   reset_token, reset_token_expires_at, created_at, updated_at
+            FROM users WHERE verification_token = %s
+        """
+        with self._get_conn() as conn:
+            with conn.cursor(dictionary=True) as cur:
+                cur.execute(sql, (token,))
+                row = cur.fetchone()
+                return self._row_to_user(row) if row else None
+
+    def get_by_reset_token(self, token: str) -> Optional[User]:
+        sql = """
+            SELECT id, email, password_hash, gamer_tag, is_verified, verification_token,
+                   reset_token, reset_token_expires_at, created_at, updated_at
+            FROM users WHERE reset_token = %s
+        """
+        with self._get_conn() as conn:
+            with conn.cursor(dictionary=True) as cur:
+                cur.execute(sql, (token,))
+                row = cur.fetchone()
+                return self._row_to_user(row) if row else None
+
+    def insert(self, user: User) -> None:
+        sql = """
+            INSERT INTO users (id, email, password_hash, gamer_tag, is_verified, verification_token,
+                               reset_token, reset_token_expires_at, created_at, updated_at)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        """
+        now = datetime.utcnow()
+        with self._get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(sql, (
+                    str(user.id), user.email, user.password_hash, user.gamer_tag,
+                    user.is_verified, user.verification_token,
+                    user.reset_token, user.reset_token_expires_at, now, now
+                ))
             conn.commit()
 
-    def create_user(self, user: User) -> User:
-        now = datetime.utcnow().isoformat()
-        with sqlite3.connect(self.db_path) as conn:
-            conn.execute("""
-                INSERT INTO users (id, email, password_hash, gamer_tag, is_verified, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
-            """, (str(user.id), user.email.lower(), user.password_hash, user.gamer_tag, 0, now, now))
-            conn.commit()
-        return user
-
-    def find_by_email(self, email: str) -> Optional[User]:
-        with sqlite3.connect(self.db_path) as conn:
-            conn.row_factory = sqlite3.Row
-            row = conn.execute("""
-                SELECT id, email, password_hash, gamer_tag, is_verified
-                FROM users WHERE email = ?
-            """, (email.lower(),)).fetchone()
-            if not row:
-                return None
-            return User(
-                id=UUID(row["id"]),
-                email=row["email"],
-                password_hash=row["password_hash"],
-                gamer_tag=row["gamer_tag"],
-                is_verified=bool(row["is_verified"])
-            )
-
-    def find_by_id(self, user_id: UUID) -> Optional[User]:
-        with sqlite3.connect(self.db_path) as conn:
-            conn.row_factory = sqlite3.Row
-            row = conn.execute("""
-                SELECT id, email, password_hash, gamer_tag, is_verified
-                FROM users WHERE id = ?
-            """, (str(user_id),)).fetchone()
-            if not row:
-                return None
-            return User(
-                id=UUID(row["id"]),
-                email=row["email"],
-                password_hash=row["password_hash"],
-                gamer_tag=row["gamer_tag"],
-                is_verified=bool(row["is_verified"])
-            )
-
-    def find_by_gamer_tag(self, gamer_tag: str) -> Optional[User]:
-        with sqlite3.connect(self.db_path) as conn:
-            conn.row_factory = sqlite3.Row
-            row = conn.execute("""
-                SELECT id, email, password_hash, gamer_tag, is_verified
-                FROM users WHERE gamer_tag = ?
-            """, (gamer_tag,)).fetchone()
-            if not row:
-                return None
-            return User(
-                id=UUID(row["id"]),
-                email=row["email"],
-                password_hash=row["password_hash"],
-                gamer_tag=row["gamer_tag"],
-                is_verified=bool(row["is_verified"])
-            )
-
-    def update_password(self, user_id: UUID, new_password_hash: str) -> bool:
-        now = datetime.utcnow().isoformat()
-        with sqlite3.connect(self.db_path) as conn:
-            cur = conn.execute("""
-                UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?
-            """, (new_password_hash, now, str(user_id)))
-            conn.commit()
-            return cur.rowcount > 0
-
-    def verify_user_email(self, user_id: UUID) -> bool:
-        now = datetime.utcnow().isoformat()
-        with sqlite3.connect(self.db_path) as conn:
-            cur = conn.execute("""
-                UPDATE users SET is_verified = 1, updated_at = ? WHERE id = ?
-            """, (now, str(user_id)))
-            conn.commit()
-            return cur.rowcount > 0
-
-    # Token storage helpers
-    def save_verification_token(self, token: str, user_id: UUID, expires_at: datetime):
-        with sqlite3.connect(self.db_path) as conn:
-            conn.execute("""
-                INSERT INTO email_verification_tokens (token, user_id, expires_at, created_at)
-                VALUES (?, ?, ?, ?)
-            """, (token, str(user_id), expires_at.isoformat(), datetime.utcnow().isoformat()))
+    def update(self, user: User) -> None:
+        sql = """
+            UPDATE users
+            SET email=%s, password_hash=%s, gamer_tag=%s, is_verified=%s, verification_token=%s,
+                reset_token=%s, reset_token_expires_at=%s, updated_at=%s
+            WHERE id=%s
+        """
+        with self._get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(sql, (
+                    user.email, user.password_hash, user.gamer_tag,
+                    user.is_verified, user.verification_token,
+                    user.reset_token, user.reset_token_expires_at,
+                    datetime.utcnow(), str(user.id)
+                ))
             conn.commit()
 
-    def pop_verification_token(self, token: str) -> Optional[UUID]:
-        with sqlite3.connect(self.db_path) as conn:
-            conn.row_factory = sqlite3.Row
-            row = conn.execute("""
-                SELECT user_id, expires_at FROM email_verification_tokens WHERE token = ?
-            """, (token,)).fetchone()
-            if not row:
-                return None
-            # delete token after read
-            conn.execute("DELETE FROM email_verification_tokens WHERE token = ?", (token,))
-            conn.commit()
-            # check expiry
-            if datetime.fromisoformat(row["expires_at"]) < datetime.utcnow():
-                return None
-            return UUID(row["user_id"])
+    # ===== SESSION METHODS =====
 
-    def save_reset_token(self, token: str, user_id: UUID, expires_at: datetime):
-        with sqlite3.connect(self.db_path) as conn:
-            conn.execute("""
-                INSERT INTO password_reset_tokens (token, user_id, expires_at, created_at, used)
-                VALUES (?, ?, ?, ?, 0)
-            """, (token, str(user_id), expires_at.isoformat(), datetime.utcnow().isoformat()))
+    def create_session(self, session: Session) -> None:
+        sql = """
+            INSERT INTO sessions (token, user_id, created_at, expires_at)
+            VALUES (%s, %s, %s, %s)
+        """
+        with self._get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(sql, (session.token, str(session.user_id), session.created_at, session.expires_at))
             conn.commit()
 
-    def pop_valid_reset_user(self, token: str) -> Optional[UUID]:
-        with sqlite3.connect(self.db_path) as conn:
-            conn.row_factory = sqlite3.Row
-            row = conn.execute("""
-                SELECT user_id, expires_at, used FROM password_reset_tokens WHERE token = ?
-            """, (token,)).fetchone()
-            if not row:
-                return None
-            if row["used"]:
-                return None
-            if datetime.fromisoformat(row["expires_at"]) < datetime.utcnow():
-                # expire token
-                conn.execute("UPDATE password_reset_tokens SET used = 1 WHERE token = ?", (token,))
-                conn.commit()
-                return None
-            # mark used
-            conn.execute("UPDATE password_reset_tokens SET used = 1 WHERE token = ?", (token,))
+    def get_session(self, token: str) -> Optional[Session]:
+        sql = """
+            SELECT token, user_id, created_at, expires_at
+            FROM sessions WHERE token = %s
+        """
+        with self._get_conn() as conn:
+            with conn.cursor(dictionary=True) as cur:
+                cur.execute(sql, (token,))
+                row = cur.fetchone()
+                return self._row_to_session(row) if row else None
+
+    def delete_session(self, token: str) -> None:
+        sql = "DELETE FROM sessions WHERE token = %s"
+        with self._get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(sql, (token,))
             conn.commit()
-            return UUID(row["user_id"])
+
+    def delete_expired_sessions(self) -> None:
+        sql = "DELETE FROM sessions WHERE expires_at < %s"
+        with self._get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(sql, (datetime.utcnow(),))
+            conn.commit()
+
+    # ===== HELPER METHODS =====
+
+    def _row_to_user(self, row: dict) -> User:
+        return User(
+            id=row["id"],
+            email=row["email"],
+            password_hash=row["password_hash"],
+            gamer_tag=row["gamer_tag"],
+            is_verified=bool(row["is_verified"]),
+            verification_token=row["verification_token"],
+            reset_token=row["reset_token"],
+            reset_token_expires_at=row["reset_token_expires_at"],
+            created_at=row["created_at"],
+            updated_at=row["updated_at"],
+        )
+
+    def _row_to_session(self, row: dict) -> Session:
+        return Session(
+            token=row["token"],
+            user_id=row["user_id"],
+            created_at=row["created_at"],
+            expires_at=row["expires_at"]
+        )
