@@ -2,7 +2,7 @@
 # relies on steam_game_info.py to get game info based on app id
 
 import random
-from steam_game_info import get_steam_game_info
+from package.steam_game_info import get_steam_game_info
 
 # Example Steam AppIDs for demo
 GAME_IDS = []
@@ -19,4 +19,5 @@ GAME_IDS = load_game_ids()
 def get_random_game():
     appid = random.choice(GAME_IDS)
     return get_steam_game_info(appid)
+
 
