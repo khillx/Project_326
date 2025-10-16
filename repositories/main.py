@@ -1,6 +1,6 @@
 # main.py
 from flask import Flask, render_template, jsonify, request # type: ignore
-from random_game import get_random_game
+from package.random_game import get_random_game
 
 app = Flask(__name__)
 
@@ -17,3 +17,4 @@ def random_game_route():
 
 if __name__ == "__main__":
     app.run(debug=True)
+
