@@ -13,6 +13,9 @@ class InvalidEmailError(Exception): pass
 class InvalidCredentialsError(Exception): pass
 class AccountNotVerifiedError(Exception): pass
 class InvalidSessionError(Exception): pass
+class InvalidTokenError(Exception): pass
+class TokenExpiredError(Exception): pass
+class UserNotFoundError(Exception): pass
 
 class AuthService:
     def __init__(self, user_repo: UserRepository, email_service: Optional[EmailService] = None):
@@ -63,18 +66,6 @@ class AuthService:
     def login(self, email: str, pwd: str, require_verification: bool = False) -> Tuple[User, Session]:
         """
         Authenticate user and create a session.
-        
-        Args:
-            email: User's email
-            pwd: User's password
-            require_verification: If True, reject unverified accounts
-            
-        Returns:
-            Tuple of (User, Session)
-            
-        Raises:
-            InvalidCredentialsError: If email/password is wrong
-            AccountNotVerifiedError: If account is not verified and require_verification=True
         """
         email = (email or "").strip().lower()
         user = self.user_repo.get_by_email(email)
@@ -85,48 +76,140 @@ class AuthService:
         if require_verification and not user.is_verified:
             raise AccountNotVerifiedError("Please verify your email before signing in.")
 
-        # Clean up expired sessions periodically
         self.user_repo.delete_expired_sessions()
 
-        # Create new session
         session = Session.create_new(user_id=user.id, expiry_days=7)
         self.user_repo.create_session(session)
 
         return user, session
 
     def logout(self, session_token: str) -> None:
-        """
-        Invalidate a session.
-        
-        Args:
-            session_token: The session token to invalidate
-            
-        Raises:
-            InvalidSessionError: If session doesn't exist
-        """
+        """Invalidate a session."""
         session = self.user_repo.get_session(session_token)
         if not session:
             raise InvalidSessionError("Invalid or expired session.")
         
         self.user_repo.delete_session(session_token)
 
-    def get_user_from_session(self, session_token: str) -> Optional[User]:
+    def verify_account(self, token: str) -> User:
         """
-        Retrieve user from a session token.
+        Verify a user's email using the verification token.
         
-        Returns None if session is invalid or expired.
+        Args:
+            token: The verification token from the email link
+            
+        Returns:
+            The verified User object
+            
+        Raises:
+            InvalidTokenError: If token is invalid or user already verified
         """
+        if not token:
+            raise InvalidTokenError("Verification token is required.")
+
+        user = self.user_repo.get_by_verification_token(token)
+        
+        if not user:
+            raise InvalidTokenError("Invalid or expired verification token.")
+        
+        if user.is_verified:
+            raise InvalidTokenError("Account is already verified.")
+
+        user.mark_verified()
+        self.user_repo.update(user)
+
+        return user
+
+    def request_password_reset(self, email: str) -> bool:
+        """
+        Initiate password reset process by sending reset email.
+        
+        Args:
+            email: User's email address
+            
+        Returns:
+            True if email was sent, False otherwise
+            
+        Note:
+            For security, we don't reveal if email exists or not
+        """
+        email = (email or "").strip().lower()
+        
+        if not self._is_valid_email(email):
+            # Don't reveal that email is invalid for security
+            return False
+
+        user = self.user_repo.get_by_email(email)
+        
+        if not user:
+            # Don't reveal that user doesn't exist for security
+            return False
+
+        # Generate reset token
+        reset_token = secrets.token_urlsafe(32)
+        user.set_reset_token(reset_token, expiry_hours=1)
+        self.user_repo.update(user)
+
+        # Send reset email
+        if self.email_service:
+            try:
+                self.email_service.send_password_reset_email(user.email, reset_token)
+                return True
+            except Exception:
+                return False
+
+        return False
+
+    def reset_password(self, token: str, new_password: str) -> User:
+        """
+        Reset user's password using the reset token.
+        
+        Args:
+            token: The reset token from the email link
+            new_password: The new password
+            
+        Returns:
+            The updated User object
+            
+        Raises:
+            InvalidTokenError: If token is invalid
+            TokenExpiredError: If token has expired
+            WeakPasswordError: If new password doesn't meet requirements
+        """
+        if not token:
+            raise InvalidTokenError("Reset token is required.")
+
+        user = self.user_repo.get_by_reset_token(token)
+        
+        if not user:
+            raise InvalidTokenError("Invalid reset token.")
+
+        if not user.is_reset_token_valid():
+            raise TokenExpiredError("Reset token has expired. Please request a new one.")
+
+        # Validate new password
+        try:
+            self._validate_password_strength(new_password or "")
+        except WeakPasswordError:
+            raise
+        except Exception as e:
+            raise WeakPasswordError(str(e))
+
+        # Update password
+        new_password_hash = self._hash_password(new_password)
+        user.update_password(new_password_hash)
+        user.clear_reset_token()
+        self.user_repo.update(user)
+
+        return user
+
+    def get_user_from_session(self, session_token: str) -> Optional[User]:
+        """Retrieve user from a session token."""
         session = self.user_repo.get_session(session_token)
         if not session or session.is_expired():
             return None
         
         return self.user_repo.get_by_id(str(session.user_id))
-
-    def reset_password(self, email):
-        pass
-
-    def verify_account(self, token):
-        pass
 
     # ===== PRIVATE HELPERS =====
 

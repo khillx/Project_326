@@ -1,7 +1,7 @@
 import mysql.connector
 from typing import Optional
 from datetime import datetime
-from models.user import User, Session  # Import Session
+from models.user import User, Session
 
 class UserRepository:
     def __init__(self, conn_params: dict):
@@ -12,7 +12,8 @@ class UserRepository:
 
     def get_by_email(self, email: str) -> Optional[User]:
         sql = """
-            SELECT id, email, password_hash, gamer_tag, is_verified, verification_token, created_at, updated_at
+            SELECT id, email, password_hash, gamer_tag, is_verified, verification_token, 
+                   reset_token, reset_token_expires_at, created_at, updated_at
             FROM users WHERE email = %s
         """
         with self._get_conn() as conn:
@@ -23,7 +24,8 @@ class UserRepository:
 
     def get_by_gamer_tag(self, gamer_tag: str) -> Optional[User]:
         sql = """
-            SELECT id, email, password_hash, gamer_tag, is_verified, verification_token, created_at, updated_at
+            SELECT id, email, password_hash, gamer_tag, is_verified, verification_token,
+                   reset_token, reset_token_expires_at, created_at, updated_at
             FROM users WHERE gamer_tag = %s
         """
         with self._get_conn() as conn:
@@ -34,7 +36,8 @@ class UserRepository:
 
     def get_by_id(self, user_id: str) -> Optional[User]:
         sql = """
-            SELECT id, email, password_hash, gamer_tag, is_verified, verification_token, created_at, updated_at
+            SELECT id, email, password_hash, gamer_tag, is_verified, verification_token,
+                   reset_token, reset_token_expires_at, created_at, updated_at
             FROM users WHERE id = %s
         """
         with self._get_conn() as conn:
@@ -43,31 +46,60 @@ class UserRepository:
                 row = cur.fetchone()
                 return self._row_to_user(row) if row else None
 
+    def get_by_verification_token(self, token: str) -> Optional[User]:
+        sql = """
+            SELECT id, email, password_hash, gamer_tag, is_verified, verification_token,
+                   reset_token, reset_token_expires_at, created_at, updated_at
+            FROM users WHERE verification_token = %s
+        """
+        with self._get_conn() as conn:
+            with conn.cursor(dictionary=True) as cur:
+                cur.execute(sql, (token,))
+                row = cur.fetchone()
+                return self._row_to_user(row) if row else None
+
+    def get_by_reset_token(self, token: str) -> Optional[User]:
+        sql = """
+            SELECT id, email, password_hash, gamer_tag, is_verified, verification_token,
+                   reset_token, reset_token_expires_at, created_at, updated_at
+            FROM users WHERE reset_token = %s
+        """
+        with self._get_conn() as conn:
+            with conn.cursor(dictionary=True) as cur:
+                cur.execute(sql, (token,))
+                row = cur.fetchone()
+                return self._row_to_user(row) if row else None
+
     def insert(self, user: User) -> None:
         sql = """
-            INSERT INTO users (id, email, password_hash, gamer_tag, is_verified, verification_token, created_at, updated_at)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+            INSERT INTO users (id, email, password_hash, gamer_tag, is_verified, verification_token,
+                               reset_token, reset_token_expires_at, created_at, updated_at)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         """
         now = datetime.utcnow()
         with self._get_conn() as conn:
             with conn.cursor() as cur:
                 cur.execute(sql, (
                     str(user.id), user.email, user.password_hash, user.gamer_tag,
-                    user.is_verified, user.verification_token, now, now
+                    user.is_verified, user.verification_token,
+                    user.reset_token, user.reset_token_expires_at, now, now
                 ))
             conn.commit()
 
     def update(self, user: User) -> None:
         sql = """
             UPDATE users
-            SET email=%s, password_hash=%s, gamer_tag=%s, is_verified=%s, verification_token=%s, updated_at=%s
+            SET email=%s, password_hash=%s, gamer_tag=%s, is_verified=%s, verification_token=%s,
+                reset_token=%s, reset_token_expires_at=%s, updated_at=%s
             WHERE id=%s
         """
         with self._get_conn() as conn:
             with conn.cursor() as cur:
                 cur.execute(sql, (
                     user.email, user.password_hash, user.gamer_tag,
-                    user.is_verified, user.verification_token, datetime.utcnow(), str(user.id)
+                    user.is_verified, user.verification_token,
+                    user.reset_token, user.reset_token_expires_at,
+                    datetime.utcnow(), str(user.id)
                 ))
             conn.commit()
 
@@ -118,6 +150,8 @@ class UserRepository:
             gamer_tag=row["gamer_tag"],
             is_verified=bool(row["is_verified"]),
             verification_token=row["verification_token"],
+            reset_token=row["reset_token"],
+            reset_token_expires_at=row["reset_token_expires_at"],
             created_at=row["created_at"],
             updated_at=row["updated_at"],
         )

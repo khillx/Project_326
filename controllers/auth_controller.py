@@ -6,7 +6,10 @@ from services.auth_service import (
     InvalidEmailError,
     InvalidCredentialsError,
     AccountNotVerifiedError,
-    InvalidSessionError
+    InvalidSessionError,
+    InvalidTokenError,
+    TokenExpiredError,
+    UserNotFoundError
 )
 
 class AuthController:
@@ -44,12 +47,6 @@ class AuthController:
             return {"error": "Internal server error"}, 500
 
     def sign_in(self, data):
-        """
-        Sign in a user with email and password.
-        
-        Expected data: {"email": "...", "password": "..."}
-        Returns: (payload, status_code)
-        """
         try:
             email = data.get("email")
             password = data.get("password")
@@ -57,7 +54,6 @@ class AuthController:
             if not email or not password:
                 return {"error": "email and password are required"}, 400
 
-            # Set require_verification=False if you want to allow unverified users to sign in
             user, session = self.auth_service.login(email, password, require_verification=False)
 
             return {
@@ -79,12 +75,6 @@ class AuthController:
             return {"error": "Internal server error"}, 500
 
     def sign_out(self, data):
-        """
-        Sign out a user by invalidating their session.
-        
-        Expected data: {"session_token": "..."}
-        Returns: (payload, status_code)
-        """
         try:
             session_token = data.get("session_token")
 
@@ -100,5 +90,91 @@ class AuthController:
         except Exception:
             return {"error": "Internal server error"}, 500
 
-    def reset_password(self, email):
-        pass
+    def verify_email(self, data):
+        """
+        Verify a user's email address.
+        
+        Expected data: {"token": "..."}
+        Returns: (payload, status_code)
+        """
+        try:
+            token = data.get("token")
+
+            if not token:
+                return {"error": "token is required"}, 400
+
+            user = self.auth_service.verify_account(token)
+
+            return {
+                "message": "Email verified successfully",
+                "user": {
+                    "id": str(user.id),
+                    "email": user.email,
+                    "gamer_tag": user.gamer_tag,
+                    "is_verified": user.is_verified
+                }
+            }, 200
+
+        except InvalidTokenError as e:
+            return {"error": str(e)}, 400
+        except Exception:
+            return {"error": "Internal server error"}, 500
+
+    def request_password_reset(self, data):
+        """
+        Request a password reset email.
+        
+        Expected data: {"email": "..."}
+        Returns: (payload, status_code)
+        
+        Note: Always returns success for security (don't reveal if email exists)
+        """
+        try:
+            email = data.get("email")
+
+            if not email:
+                return {"error": "email is required"}, 400
+
+            # Always return success for security
+            self.auth_service.request_password_reset(email)
+
+            return {
+                "message": "If an account exists with this email, a password reset link has been sent."
+            }, 200
+
+        except Exception:
+            return {"error": "Internal server error"}, 500
+
+    def reset_password(self, data):
+        """
+        Reset password using token and new password.
+        
+        Expected data: {"token": "...", "new_password": "..."}
+        Returns: (payload, status_code)
+        """
+        try:
+            token = data.get("token")
+            new_password = data.get("new_password")
+
+            if not token or not new_password:
+                return {"error": "token and new_password are required"}, 400
+
+            user = self.auth_service.reset_password(token, new_password)
+
+            return {
+                "message": "Password reset successfully",
+                "user": {
+                    "id": str(user.id),
+                    "email": user.email,
+                    "gamer_tag": user.gamer_tag
+                }
+            }, 200
+
+        except InvalidTokenError as e:
+            return {"error": str(e)}, 400
+        except TokenExpiredError as e:
+            return {"error": str(e)}, 400
+        except WeakPasswordError as e:
+            return {"error": str(e)}, 400
+        except Exception:
+            return {"error": "Internal server error"}, 500
