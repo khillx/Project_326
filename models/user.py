@@ -2,6 +2,7 @@ from dataclasses import dataclass, field
 from uuid import UUID, uuid4
 from datetime import datetime
 from typing import Optional
+import bcrypt
 
 @dataclass
 class User:
@@ -18,6 +19,10 @@ class User:
         self.is_verified = True
         self.verification_token = None
         self.updated_at = datetime.utcnow()
+
+    def verify_password(self, pwd: str) -> bool:
+        """Check if the provided password matches the stored hash."""
+        return bcrypt.checkpw(pwd.encode("utf-8"), self.password_hash.encode("utf-8"))
 
     @staticmethod
     def create_new(email: str, password_hash: str, gamer_tag: str, verification_token: Optional[str] = None) -> "User":
