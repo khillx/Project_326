@@ -1,5 +1,3 @@
-@ -1,12 +1,181 @@
-
 from services.auth_service import (
     AuthService, 
     EmailAlreadyExistsError, 
@@ -19,7 +17,6 @@ class AuthController:
         self.auth_service = auth_service
 
     def sign_up(self, data):
-        pass
         try:
             email = data.get("email")
             password = data.get("password")
@@ -50,7 +47,6 @@ class AuthController:
             return {"error": "Internal server error"}, 500
 
     def sign_in(self, data):
-        pass
         try:
             email = data.get("email")
             password = data.get("password")
@@ -165,8 +161,6 @@ class AuthController:
 
             user = self.auth_service.reset_password(token, new_password)
 
-    def sign_out(self):
-        pass
             return {
                 "message": "Password reset successfully",
                 "user": {
@@ -176,8 +170,6 @@ class AuthController:
                 }
             }, 200
 
-    def reset_password(self, email):
-        pass
         except InvalidTokenError as e:
             return {"error": str(e)}, 400
         except TokenExpiredError as e:
