@@ -163,3 +163,41 @@ class UserRepository:
             created_at=row["created_at"],
             expires_at=row["expires_at"]
         )
+
+    def email_exists_for_other(self, email: str, exclude_user_id: UUID) -> bool:
+        with sqlite3.connect(self.db_path) as conn:
+            row = conn.execute(
+                "SELECT 1 FROM users WHERE email = ? AND id <> ?",
+                (email.lower(), str(exclude_user_id)),
+            ).fetchone()
+            return row is not None
+
+    def gamer_tag_exists_for_other(self, gamer_tag: str, exclude_user_id: UUID) -> bool:
+        with sqlite3.connect(self.db_path) as conn:
+            row = conn.execute(
+                "SELECT 1 FROM users WHERE gamer_tag = ? AND id <> ?",
+                (gamer_tag, str(exclude_user_id)),
+            ).fetchone()
+            return row is not None
+
+    def update_profile(self, user_id: UUID, *, email: str | None = None, gamer_tag: str | None = None) -> bool:
+        """Update email and/or gamer_tag."""
+        sets = []
+        params = []
+        if email is not None:
+            sets.append("email = ?")
+            params.append(email.lower())
+        if gamer_tag is not None:
+            sets.append("gamer_tag = ?")
+            params.append(gamer_tag)
+        if not sets:
+            return False
+        sets.append("updated_at = ?")
+        params.append(datetime.utcnow().isoformat())
+        params.append(str(user_id))
+
+        sql = f"UPDATE users SET {', '.join(sets)} WHERE id = ?"
+        with sqlite3.connect(self.db_path) as conn:
+            cur = conn.execute(sql, tuple(params))
+            conn.commit()
+            return cur.rowcount > 0

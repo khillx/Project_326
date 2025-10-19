@@ -178,3 +178,48 @@ class AuthController:
             return {"error": str(e)}, 400
         except Exception:
             return {"error": "Internal server error"}, 500
+
+    def update_profile(self):
+        """PATCH /api/auth/me - Update email and/or gamer_tag for authenticated user"""
+        try:
+            auth_header = request.headers.get('Authorization')
+            if not auth_header or not auth_header.lower().startswith("bearer "):
+                return jsonify({"success": False, "error": "Missing Bearer token"}), 401
+            token = auth_header.split()[1]
+
+            data = request.get_json() or {}
+            new_email = data.get("email")
+            new_gamer_tag = data.get("gamer_tag")
+
+            result = self.auth_service.update_profile(token, new_email=new_email, new_gamer_tag=new_gamer_tag)
+            return jsonify(result), 200
+
+        except ValueError as e:
+            return jsonify({"success": False, "error": str(e)}), 400
+        except Exception as e:
+            print(f"Error in update_profile: {e}")
+            return jsonify({"success": False, "error": "Internal server error"}), 500
+
+    def change_password(self):
+        """POST /api/auth/change-password - Change password for authenticated user"""
+        try:
+            auth_header = request.headers.get('Authorization')
+            if not auth_header or not auth_header.lower().startswith("bearer "):
+                return jsonify({"success": False, "error": "Missing Bearer token"}), 401
+            token = auth_header.split()[1]
+
+            data = request.get_json() or {}
+            current_password = data.get("current_password")
+            new_password = data.get("new_password")
+
+            if not current_password or not new_password:
+                return jsonify({"success": False, "error": "current_password and new_password required"}), 400
+
+            result = self.auth_service.change_password(token, current_password, new_password)
+            return jsonify(result), 200
+
+        except ValueError as e:
+            return jsonify({"success": False, "error": str(e)}), 400
+        except Exception as e:
+            print(f"Error in change_password: {e}")
+            return jsonify({"success": False, "error": "Internal server error"}), 500

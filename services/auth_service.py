@@ -231,3 +231,87 @@ class AuthService:
             raise WeakPasswordError("Password must contain a digit.")
         if not re.search(r"[^\w\s]", pwd):
             raise WeakPasswordError("Password must contain a special character.")
+
+    def update_profile(self, token: str, *, new_email: str | None = None, new_gamer_tag: str | None = None) -> dict:
+        """Update the authenticated user's email and/or gamer_tag."""
+        user_id = self.verify_token(token)
+        if not user_id:
+            raise ValueError("Invalid or missing session token")
+
+        # Nothing to update
+        if not new_email and not new_gamer_tag:
+            raise ValueError("No changes provided")
+
+        # Validate inputs and check uniqueness
+        if new_email is not None:
+            if not self._is_valid_email(new_email):
+                raise ValueError("Invalid email format")
+            if self.user_repo.email_exists_for_other(new_email, user_id):
+                raise ValueError("Email already in use by another account")
+
+        if new_gamer_tag is not None:
+            if not self._is_valid_gamer_tag(new_gamer_tag):
+                raise ValueError("Gamer tag must be 3-20 chars, alphanumeric/underscore")
+            if self.user_repo.gamer_tag_exists_for_other(new_gamer_tag, user_id):
+                raise ValueError("Gamer tag already taken")
+
+        # If changing email, you may want to re-verify email
+        email_changed = new_email is not None
+
+        updated = self.user_repo.update_profile(user_id, email=new_email, gamer_tag=new_gamer_tag)
+        if not updated:
+            raise ValueError("No changes applied")
+
+        # If email changed: mark unverified and send new verification link
+        if email_changed:
+            # mark unverified
+            self.user_repo.verify_user_email(user_id)  # ensure row exists; then set back to 0
+            # quick flip to 0
+            # since we don't have a method, do it here directly
+            import sqlite3
+            with sqlite3.connect(self.user_repo.db_path) as conn:
+                conn.execute("UPDATE users SET is_verified = 0 WHERE id = ?", (str(user_id),))
+                conn.commit()
+
+            # new verification token
+            new_token = secrets.token_urlsafe(32)
+            expires = datetime.utcnow() + timedelta(hours=24)
+            self.user_repo.save_verification_token(new_token, user_id, expires)
+
+            # Send to new email
+            self.email_service.send_verification_email(new_email, new_token)
+
+        # Return the updated user
+        user = self.user_repo.find_by_id(user_id)
+        return {
+            "success": True,
+            "user_id": str(user.id),
+            "email": user.email,
+            "gamer_tag": user.gamer_tag,
+            "is_verified": user.is_verified,
+            "message": "Profile updated successfully" + (" - please verify your new email" if email_changed else "")
+        }
+
+    def change_password(self, token: str, current_password: str, new_password: str) -> dict:
+        """Allow the authenticated user to change their password."""
+        user_id = self.verify_token(token)
+        if not user_id:
+            raise ValueError("Invalid or missing session token")
+
+        user = self.user_repo.find_by_id(user_id)
+        if not user:
+            raise ValueError("User not found")
+
+        # verify current password
+        if not bcrypt.checkpw(current_password.encode("utf-8"), user.password_hash.encode("utf-8")):
+            raise ValueError("Current password is incorrect")
+
+        # validate new password
+        if not self._is_valid_password(new_password):
+            raise ValueError("Password must be at least 8 chars with upper, lower, and number")
+
+        # update hash
+        new_hash = bcrypt.hashpw(new_password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
+        self.user_repo.update_password(user_id, new_hash)
+
+        return {"success": True, "message": "Password changed successfully"}
