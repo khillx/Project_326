@@ -2,6 +2,7 @@ import mysql.connector
 from typing import Optional
 from datetime import datetime
 from models.user import User, Session
+from uuid import UUID
 
 class UserRepository:
     def __init__(self, conn_params: dict):
