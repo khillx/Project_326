@@ -1,19 +1,17 @@
 .star {
-  font-size: 10vh;
-  cursor: pointer;
+    font-size: 2.5rem;
+    cursor: pointer;
+    color: #ccc;
+    transition: color 0.2s ease;
+    user-select: none;
 }
-.one {
-  color: #ffff89;
-}
-.two {
-  color: #ffff89;
-}
-.three {
-  color: #ffff89;
-}
-.four {
-  color: #ffff89;
-}
-.five {
-  color: #ffff89;
+
+.one { color: #ff6b6b; }
+.two { color: #feca57; }
+.three { color: #ff9ff3; }
+.four { color: #54a0ff; }
+.five { color: #48dbfb; }
+
+.star:hover {
+    transform: scale(1.1);
 }
