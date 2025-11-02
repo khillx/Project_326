@@ -178,3 +178,42 @@ class AuthController:
             return {"error": str(e)}, 400
         except Exception:
             return {"error": "Internal server error"}, 500
+    def set_preferences(self):
+        """PUT /api/auth/preferences - Set or update user game preferences"""
+        try:
+            auth_header = request.headers.get('Authorization')
+            if not auth_header or not auth_header.lower().startswith('bearer '):
+                return jsonify({"success": False, "error": "Missing Bearer token"}), 401
+            token = auth_header.split()[1]
+
+            data = request.get_json() or {}
+            result = self.auth_service.set_preferences(
+                token,
+                preferred_genres=data.get("preferred_genres"),
+                min_rating=data.get("min_rating"),
+                max_price=data.get("max_price"),
+                esrb_ratings=data.get("esrb_ratings"),
+                platforms=data.get("platforms"),
+            )
+            return jsonify(result), 200
+        except ValueError as e:
+            return jsonify({"success": False, "error": str(e)}), 400
+        except Exception as e:
+            print(f"Error in set_preferences: {e}")
+            return jsonify({"success": False, "error": "Internal server error"}), 500
+
+    def get_preferences(self):
+        """GET /api/auth/preferences - Get current user game preferences"""
+        try:
+            auth_header = request.headers.get('Authorization')
+            if not auth_header or not auth_header.lower().startswith('bearer '):
+                return jsonify({"success": False, "error": "Missing Bearer token"}), 401
+            token = auth_header.split()[1]
+
+            result = self.auth_service.get_preferences(token)
+            return jsonify(result), 200
+        except ValueError as e:
+            return jsonify({"success": False, "error": str(e)}), 400
+        except Exception as e:
+            print(f"Error in get_preferences: {e}")
+            return jsonify({"success": False, "error": "Internal server error"}), 500
