@@ -1,4 +1,10 @@
-from dataclasses import dataclass, field
+from dataclasses import dataclass
+from uuid import UUID
+
+@dataclass
+class User:
+    id: UUID
+    email: strfrom dataclasses import dataclass, field
 from uuid import UUID, uuid4
 from datetime import datetime, timedelta
 from typing import Optional
@@ -79,3 +85,8 @@ class Session:
             user_id=user_id,
             expires_at=datetime.utcnow() + timedelta(days=expiry_days)
         )
+    password_hash: str
+    gamer_tag: str
+
+    def verify_email(self) -> bool:
+        pass
