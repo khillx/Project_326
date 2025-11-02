@@ -87,7 +87,23 @@ def reset_password():
     payload, status = auth_controller.reset_password(body)
     return jsonify(payload), status
 
-# =======================
+
+@app.route('/api/auth/me', methods=['PATCH'])
+def update_me():
+    return auth_controller.update_profile()
+
+@app.route('/api/auth/change-password', methods=['POST'])
+def change_password():
+    return auth_controller.change_password()
+
+@app.route('/api/auth/preferences', methods=['PUT'])
+def set_prefs():
+    return auth_controller.set_preferences()
+
+@app.route('/api/auth/preferences', methods=['GET'])
+def get_prefs():
+    return auth_controller.get_preferences()
+
 
 if __name__ == "__main__":
     # Dependencies:
