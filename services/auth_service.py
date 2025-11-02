@@ -210,7 +210,60 @@ class AuthService:
             return None
         
         return self.user_repo.get_by_id(str(session.user_id))
+    def set_preferences(
+        self,
+        token: str,
+        *,
+        preferred_genres: list[str] | None = None,
+        min_rating: float | None = None,
+        max_price: float | None = None,
+        esrb_ratings: list[str] | None = None,
+        platforms: list[str] | None = None,
+    ) -> dict:
+        """Create or update preferences for the authenticated user."""
+        user_id = self.verify_token(token)
+        if not user_id:
+            raise ValueError("Invalid or missing session token")
 
+        # Validation
+        if min_rating is not None:
+            if not (0 <= float(min_rating) <= 5):
+                raise ValueError("min_rating must be between 0 and 5")
+        if max_price is not None:
+            if float(max_price) < 0:
+                raise ValueError("max_price must be >= 0")
+        if preferred_genres is not None and not isinstance(preferred_genres, list):
+            raise ValueError("preferred_genres must be a list of strings")
+        if esrb_ratings is not None and not isinstance(esrb_ratings, list):
+            raise ValueError("esrb_ratings must be a list of strings")
+        if platforms is not None and not isinstance(platforms, list):
+            raise ValueError("platforms must be a list of strings")
+
+        self.user_repo.upsert_user_preferences(
+            user_id,
+            preferred_genres=preferred_genres,
+            min_rating=min_rating,
+            max_price=max_price,
+            esrb_ratings=esrb_ratings,
+            platforms=platforms,
+        )
+
+        prefs = self.user_repo.get_user_preferences(user_id)
+        return {"success": True, "preferences": prefs}
+
+    def get_preferences(self, token: str) -> dict:
+        user_id = self.verify_token(token)
+        if not user_id:
+            raise ValueError("Invalid or missing session token")
+        prefs = self.user_repo.get_user_preferences(user_id) or {
+            "preferred_genres": [],
+            "min_rating": None,
+            "max_price": None,
+            "esrb_ratings": [],
+            "platforms": [],
+        }
+        return {"success": True, "preferences": prefs}
+    
     # ===== PRIVATE HELPERS =====
 
     def _hash_password(self, pwd: str) -> str:
