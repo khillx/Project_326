@@ -49,21 +49,29 @@
     color: white;
 }
 
-/* Resend 2FA and Back to Login buttons */
-.aux-button {
-    display: inline-block;
-    margin-top: 10px;
-    padding: 8px 15px;
-    background-color: #4CAF50; /* green button */
-    color: white;
-    text-decoration: none;
-    border: none;
-    border-radius: 5px;
-    cursor: pointer;
-    font-size: 14px;
+.header-button {
+    display: flex;
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    gap: 10px; /* space between buttons */
 }
 
-.aux-button:hover {
-    background-color: #45a049;
+.header-button button {
+    background: none;
+    text-decoration: underline;
+    border: none;
+    padding: 10px 20px;
+    color: white;
+    cursor: pointer;
+    font-size: 11px;
+}
+
+.header-button button:hover {
+    color: rgb(207, 206, 206);
+}
+
+.header-button button:active {
+    color: rgb(114, 114, 114);
 }
 

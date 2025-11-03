@@ -1,0 +1,104 @@
+.modal {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.7);
+    z-index: 1000;
+    justify-content: center;
+    align-items: center;
+}
+
+.modal-content {
+    background: #1a2332;
+    width: 80%;
+    max-width: 400px;
+    padding: 20px;
+    border-radius: 10px;
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
+    text-align: center;
+}
+
+.modal-content h2 {
+    margin: 0 0 15px;
+    color: #90caf9;
+    font-size: 20px;
+}
+
+.modal-content h3 {
+    margin: 15px 0 10px;
+    color: #b0bec5;
+    font-size: 16px;
+}
+
+.stars-container {
+    display: flex;
+    justify-content: center;
+    gap: 5px;
+    margin: 10px 0;
+}
+
+.star {
+    cursor: pointer;
+    color: #ccc;
+    font-size: 24px;
+    transition: color 0.2s;
+}
+
+.star:hover, .star.active {
+    color: #ffd700;
+}
+
+.review-text {
+    width: 100%;
+    padding: 10px;
+    margin: 10px 0;
+    border-radius: 5px;
+    background: #2a3447;
+    border: 1px solid #3a445f;
+    color: white;
+    min-height: 80px;
+    resize: vertical;
+}
+
+.modal-btn {
+    background: #4a6fa5;
+    color: white;
+    padding: 8px 15px;
+    border: none;
+    border-radius: 8px;
+    font-weight: 500;
+    cursor: pointer;
+    margin: 5px 0;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+    transition: all 0.2s ease;
+}
+
+.modal-btn:hover {
+    background: #5a8fc5;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+}
+
+.close-btn {
+    background: #455a7a;
+    padding: 8px 15px;
+    border: none;
+    border-radius: 8px;
+    color: white;
+    cursor: pointer;
+    margin-top: 10px;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+}
+
+.close-btn:hover {
+    background: #5a6f8a;
+}
+
+#modal-status {
+    margin-top: 10px;
+    color: #81c784;
+    font-size: 14px;
+}

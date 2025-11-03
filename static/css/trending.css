@@ -1,0 +1,79 @@
+/* Body and header */
+body {
+    background-color: rgb(30,37,53);
+    font-family: Arial, sans-serif;
+    margin: 0;
+    padding: 0;
+    color: white;
+}
+
+header {
+    background-color: rgb(40,53,81);
+    padding: 10px 20px;
+    display: flex;               
+    align-items: center;         
+    justify-content: space-between; 
+}
+
+.page-title {
+    margin: 0;
+    font-size: 24px;
+}
+
+.header-button button {
+    background: none;
+    text-decoration: underline;
+    border: none;
+    padding: 10px 20px;
+    color: white;
+    cursor: pointer;
+    font-size: 11px;
+}
+
+main {
+    padding: 20px;
+}
+
+/* Grid for trending games */
+.trending-container {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr); /* 2 columns */
+    gap: 20px;
+    justify-items: center;
+}
+
+/* Individual game card */
+.trending-box {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: 550px; /* fixed width per game card */
+    background-color: #222;
+    border-radius: 10px;
+    border: 1px solid white; /* add this line for white border */
+    padding: 15px;
+    text-align: center;
+}
+
+/* Game image */
+.trending-image {
+    width: 500px;
+    height: auto;
+    border-radius: 10px;
+    margin-bottom: 10px;
+}
+
+/* Game name */
+.trending-box h3 {
+    margin: 5px 0;
+    font-size: 18px;
+}
+
+/* Game description */
+.trending-box p {
+    font-size: 14px;
+    margin: 5px 0 0 0;
+    word-wrap: break-word;
+}
+
+
