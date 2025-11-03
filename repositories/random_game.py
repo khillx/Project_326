@@ -20,4 +20,3 @@ def get_random_game():
     appid = random.choice(GAME_IDS)
     return get_steam_game_info(appid)
 
-

@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Verify 2FA - What Should I Play?</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/base.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/layout.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/header.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/button.css') }}">
+</head>
+<body>
+<header>
+    <h1 class="page-title">Two-Factor Authentication</h1>
+</header>
+
+<main>
+    {% with messages = get_flashed_messages() %}
+      {% if messages %}
+        <div class="flash-messages">
+          {% for message in messages %}
+            <p>{{ message }}</p>
+          {% endfor %}
+        </div>
+      {% endif %}
+    {% endwith %}
+
+    <section class="signin-signout">
+        <h3>Enter the 2FA code sent to your email</h3>
+        <form method="POST" action="{{ url_for('auth.verify_2fa') }}">
+            <label for="code">2FA Code:</label><br/>
+            <input type="text" id="code" name="code" required><br/><br/>
+
+            <input type="submit" value="Verify" class="aux-button">
+        </form>
+    </section>
+</main>
+</body>
+</html>

@@ -35,3 +35,4 @@ class GameRepository:
             return True
 
         return [g for g in games if ok(g)]
+    

@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Login - What Should I Play?</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/base.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/layout.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/header.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/button.css') }}">
+</head>
+<body>
+<header>
+    <h1 class="page-title">What Should I Play?</h1>
+</header>
+
+<main>
+    {% with messages = get_flashed_messages() %}
+      {% if messages %}
+        <div class="flash-messages">
+          {% for message in messages %}
+            <p>{{ message }}</p>
+          {% endfor %}
+        </div>
+      {% endif %}
+    {% endwith %}
+
+    <section class="signin-signout">
+        <h3>Welcome back!</h3>
+        <form method="POST" action="{{ url_for('auth.login') }}">
+            <label for="username">Username:</label><br/>
+            <input type="text" id="username" name="username" required><br/><br/>
+
+            <label for="password">Password:</label><br/>
+            <input type="password" id="password" name="password" required><br/><br/>
+
+            <input type="submit" value="Login" class="aux-button">
+        </form>
+
+        <p>Forgot your password? <a href="#" class="aux-button">Click here</a></p>
+        <p>New here? <a href="{{ url_for('auth.register') }}" class="aux-button">Create an Account!</a></p>
+    </section>
+</main>
+</body>
+</html>

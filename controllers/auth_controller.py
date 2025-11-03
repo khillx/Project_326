@@ -1,219 +1,51 @@
-from services.auth_service import (
-    AuthService, 
-    EmailAlreadyExistsError, 
-    GamerTagAlreadyExistsError, 
-    WeakPasswordError, 
-    InvalidEmailError,
-    InvalidCredentialsError,
-    AccountNotVerifiedError,
-    InvalidSessionError,
-    InvalidTokenError,
-    TokenExpiredError,
-    UserNotFoundError
-)
+from flask import Blueprint, render_template, request, redirect, url_for, flash, session
+from services.auth_service import AuthService
+import os
 
-class AuthController:
-    def __init__(self, auth_service: AuthService):
-        self.auth_service = auth_service
+auth_bp = Blueprint("auth", __name__)
+smtp_user = os.getenv("EMAIL_USER")
+smtp_pass = os.getenv("EMAIL_PASS")
 
-    def sign_up(self, data):
+@auth_bp.route("/login", methods=["GET", "POST"])
+def login():
+    if request.method == "POST":
+        username = request.form["username"]
+        password = request.form["password"]
+        user = AuthService.verify_login(username, password)
+        if user:
+            session["user_id"] = user["id"]
+            session["2fa_code"] = AuthService.generate_2fa_code()
+            AuthService.send_2fa_email(user["email"], session["2fa_code"], smtp_user, smtp_pass)
+            return redirect(url_for("auth.verify_2fa"))
+        flash("Invalid username or password")
+    return render_template("login.html")
+
+@auth_bp.route("/register", methods=["GET", "POST"])
+def register():
+    if request.method == "POST":
+        username = request.form["username"]
+        email = request.form["email"]
+        password = request.form["password"]
         try:
-            email = data.get("email")
-            password = data.get("password")
-            gamer_tag = data.get("gamer_tag")
+            from repositories.user_repository import UserRepository
+            UserRepository.create(username, email, password)
+            flash("Account created! Please log in.")
+            return redirect(url_for("auth.login"))
+        except:
+            flash("Username or email already exists")
+    return render_template("register.html")
 
-            if not email or not password or not gamer_tag:
-                return {"error": "email, password and gamer_tag are required"}, 400
+@auth_bp.route("/verify_2fa", methods=["GET", "POST"])
+def verify_2fa():
+    if request.method == "POST":
+        code = request.form["code"]
+        if code == session.get("2fa_code"):
+            session.pop("2fa_code", None)
+            return redirect(url_for("index"))
+        flash("Invalid 2FA code")
+    return render_template("verify_2fa.html")
 
-            user, verification_sent = self.auth_service.create_account(email, password, gamer_tag)
-
-            return {
-                "id": str(user.id),
-                "email": user.email,
-                "gamer_tag": user.gamer_tag,
-                "is_verified": user.is_verified,
-                "verification_email_sent": verification_sent
-            }, 201
-
-        except InvalidEmailError as e:
-            return {"error": str(e)}, 400
-        except WeakPasswordError as e:
-            return {"error": str(e)}, 400
-        except EmailAlreadyExistsError as e:
-            return {"error": str(e)}, 409
-        except GamerTagAlreadyExistsError as e:
-            return {"error": str(e)}, 409
-        except Exception:
-            return {"error": "Internal server error"}, 500
-
-    def sign_in(self, data):
-        try:
-            email = data.get("email")
-            password = data.get("password")
-
-            if not email or not password:
-                return {"error": "email and password are required"}, 400
-
-            user, session = self.auth_service.login(email, password, require_verification=False)
-
-            return {
-                "session_token": session.token,
-                "user": {
-                    "id": str(user.id),
-                    "email": user.email,
-                    "gamer_tag": user.gamer_tag,
-                    "is_verified": user.is_verified
-                },
-                "expires_at": session.expires_at.isoformat()
-            }, 200
-
-        except InvalidCredentialsError as e:
-            return {"error": str(e)}, 401
-        except AccountNotVerifiedError as e:
-            return {"error": str(e)}, 403
-        except Exception:
-            return {"error": "Internal server error"}, 500
-
-    def sign_out(self, data):
-        try:
-            session_token = data.get("session_token")
-
-            if not session_token:
-                return {"error": "session_token is required"}, 400
-
-            self.auth_service.logout(session_token)
-
-            return {"message": "Successfully signed out"}, 200
-
-        except InvalidSessionError as e:
-            return {"error": str(e)}, 401
-        except Exception:
-            return {"error": "Internal server error"}, 500
-
-    def verify_email(self, data):
-        """
-        Verify a user's email address.
-        
-        Expected data: {"token": "..."}
-        Returns: (payload, status_code)
-        """
-        try:
-            token = data.get("token")
-
-            if not token:
-                return {"error": "token is required"}, 400
-
-            user = self.auth_service.verify_account(token)
-
-            return {
-                "message": "Email verified successfully",
-                "user": {
-                    "id": str(user.id),
-                    "email": user.email,
-                    "gamer_tag": user.gamer_tag,
-                    "is_verified": user.is_verified
-                }
-            }, 200
-
-        except InvalidTokenError as e:
-            return {"error": str(e)}, 400
-        except Exception:
-            return {"error": "Internal server error"}, 500
-
-    def request_password_reset(self, data):
-        """
-        Request a password reset email.
-        
-        Expected data: {"email": "..."}
-        Returns: (payload, status_code)
-        
-        Note: Always returns success for security (don't reveal if email exists)
-        """
-        try:
-            email = data.get("email")
-
-            if not email:
-                return {"error": "email is required"}, 400
-
-            # Always return success for security
-            self.auth_service.request_password_reset(email)
-
-            return {
-                "message": "If an account exists with this email, a password reset link has been sent."
-            }, 200
-
-        except Exception:
-            return {"error": "Internal server error"}, 500
-
-    def reset_password(self, data):
-        """
-        Reset password using token and new password.
-        
-        Expected data: {"token": "...", "new_password": "..."}
-        Returns: (payload, status_code)
-        """
-        try:
-            token = data.get("token")
-            new_password = data.get("new_password")
-
-            if not token or not new_password:
-                return {"error": "token and new_password are required"}, 400
-
-            user = self.auth_service.reset_password(token, new_password)
-
-            return {
-                "message": "Password reset successfully",
-                "user": {
-                    "id": str(user.id),
-                    "email": user.email,
-                    "gamer_tag": user.gamer_tag
-                }
-            }, 200
-
-        except InvalidTokenError as e:
-            return {"error": str(e)}, 400
-        except TokenExpiredError as e:
-            return {"error": str(e)}, 400
-        except WeakPasswordError as e:
-            return {"error": str(e)}, 400
-        except Exception:
-            return {"error": "Internal server error"}, 500
-    def set_preferences(self):
-        """PUT /api/auth/preferences - Set or update user game preferences"""
-        try:
-            auth_header = request.headers.get('Authorization')
-            if not auth_header or not auth_header.lower().startswith('bearer '):
-                return jsonify({"success": False, "error": "Missing Bearer token"}), 401
-            token = auth_header.split()[1]
-
-            data = request.get_json() or {}
-            result = self.auth_service.set_preferences(
-                token,
-                preferred_genres=data.get("preferred_genres"),
-                min_rating=data.get("min_rating"),
-                max_price=data.get("max_price"),
-                esrb_ratings=data.get("esrb_ratings"),
-                platforms=data.get("platforms"),
-            )
-            return jsonify(result), 200
-        except ValueError as e:
-            return jsonify({"success": False, "error": str(e)}), 400
-        except Exception as e:
-            print(f"Error in set_preferences: {e}")
-            return jsonify({"success": False, "error": "Internal server error"}), 500
-
-    def get_preferences(self):
-        """GET /api/auth/preferences - Get current user game preferences"""
-        try:
-            auth_header = request.headers.get('Authorization')
-            if not auth_header or not auth_header.lower().startswith('bearer '):
-                return jsonify({"success": False, "error": "Missing Bearer token"}), 401
-            token = auth_header.split()[1]
-
-            result = self.auth_service.get_preferences(token)
-            return jsonify(result), 200
-        except ValueError as e:
-            return jsonify({"success": False, "error": str(e)}), 400
-        except Exception as e:
-            print(f"Error in get_preferences: {e}")
-            return jsonify({"success": False, "error": "Internal server error"}), 500
+@auth_bp.route("/logout")
+def logout():
+    session.clear()
+    return redirect(url_for("auth.login"))
