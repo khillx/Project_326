@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Trending Games</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/trending.css') }}">
+</head>
+
+<body>
+    <header>
+        <h1 class="page-title">Trending Games</h1>
+        <div class="header-button">
+            <button onclick="window.location.href='{{ url_for('index') }}'">Home</button>
+            <button onclick="window.location.href='{{ url_for('trending_page') }}'">What's Trending?</button>
+        </div>
+    </header>
+
+    <main>
+        <section class="trending-container">
+            {% for game in trending_games %}
+                <div class="trending-box">
+                    <img src="{{ game.image }}" alt="{{ game.name }}" class="trending-image">
+                    <h3>{{ game.name }}</h3>
+                    <p>{{ game.short_description }}</p>
+                </div>
+            {% endfor %}
+        </section>
+    </main>
+</body>
+</html>
